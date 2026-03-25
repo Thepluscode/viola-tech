@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY ui/web/package.json ui/web/package-lock.json ./
-RUN npm ci
+RUN npm install
 COPY ui/web/ ./
 ENV NEXT_PUBLIC_USE_MOCK=true
 ENV NEXT_TELEMETRY_DISABLED=1
