@@ -8,6 +8,12 @@ export const metadata: Metadata = {
     template: "%s | Viola XDR",
   },
   description: "Viola Extended Detection and Response — SOC Console",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "32x32" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+  },
 };
 
 export default function RootLayout({
