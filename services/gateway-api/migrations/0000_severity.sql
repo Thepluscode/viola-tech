@@ -1,0 +1,9 @@
+-- 0000_severity.sql
+-- INTENTIONALLY EMPTY.
+--
+-- The greatest_severity() Postgres UDF was removed as part of council
+-- recommendation C1. Severity resolution is now performed in Go application
+-- code (see workers/internal/incident/store.go: maxSeverity()).
+--
+-- If you are running against an existing database that already has this UDF,
+-- apply migration 0004_drop_severity_udf.sql to remove it.

@@ -1,0 +1,48 @@
+id: viola:persist_admin_account_creation
+name: Suspicious Administrator Account Creation
+version: 1.0.0
+severity: high
+confidence: 0.90
+category: persistence
+
+event_type: process_start
+
+description: |
+  Detects creation of new user accounts with administrator privileges,
+  commonly used for persistence and privilege escalation.
+
+mitre:
+  tactic: persistence
+  technique: T1136.001
+
+match:
+  - field: process_name
+    operator: equals
+    value: net.exe
+
+  - field: cmdline
+    operator: contains
+    value: user /add
+
+  - field: cmdline
+    operator: contains_any
+    values:
+      - administrators
+      - admin
+
+suppress_if:
+  - field: parent_process_name
+    operator: startswith
+    value: msiexec
+
+tags:
+  - windows
+  - persistence
+  - privilege-escalation
+  - t1136
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1136/001/

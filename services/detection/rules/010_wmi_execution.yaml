@@ -1,0 +1,53 @@
+id: viola:exec_wmi_suspicious
+name: Suspicious WMI Execution
+version: 1.0.0
+severity: high
+confidence: 0.85
+category: execution
+
+event_type: process_start
+
+description: |
+  Detects suspicious usage of WMI (Windows Management Instrumentation)
+  for remote code execution and lateral movement.
+
+mitre:
+  tactic: execution
+  technique: T1047
+
+match:
+  - field: process_name
+    operator: equals_any
+    values:
+      - wmic.exe
+      - wmiprvse.exe
+
+  - field: cmdline
+    operator: contains_any
+    values:
+      - process call create
+      - /node:
+      - shadowcopy
+
+  - field: cmdline
+    operator: not_in
+    values:
+      - /format
+
+suppress_if:
+  - field: user
+    operator: equals
+    value: SYSTEM
+
+tags:
+  - windows
+  - execution
+  - lateral-movement
+  - wmi
+  - t1047
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1047/

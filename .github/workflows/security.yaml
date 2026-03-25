@@ -1,0 +1,92 @@
+name: security
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Weekly Monday 6 AM UTC
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Go vulnerability check ───────────────────────────────────────────
+  govulncheck:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - shared/go
+          - services/auth
+          - services/ingestion
+          - services/detection
+          - services/workers
+          - services/gateway-api
+          - services/graph
+          - services/intel
+          - services/response
+          - agent
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+          cache: true
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck on ${{ matrix.module }}
+        run: cd ${{ matrix.module }} && govulncheck ./...
+
+  # ── npm audit ─────────────────────────────────────────────────────────
+  npm-audit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - name: npm audit
+        run: npm audit --audit-level=high || true
+
+  # ── Trivy container scan ──────────────────────────────────────────────
+  trivy:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [auth, gateway-api, detection, workers, ingestion, graph, intel, response]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t viola-${{ matrix.service }}:scan -f services/${{ matrix.service }}/Dockerfile .
+
+      - name: Trivy scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: viola-${{ matrix.service }}:scan
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+  # ── CodeQL ────────────────────────────────────────────────────────────
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: go, javascript
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3

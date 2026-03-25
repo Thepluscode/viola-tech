@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package viola.audit.v1;
+
+option go_package = "github.com/viola/shared/proto/audit;auditv1";
+
+// AuditEvent represents a security-relevant action
+message AuditEvent {
+  string audit_id = 1;
+  string tenant_id = 2;
+  string request_id = 3;
+  string occurred_at = 4;  // RFC3339
+
+  // Actor (who)
+  string actor_type = 5;   // "user", "service", "system"
+  string actor_id = 6;     // user email, service name, etc.
+  string actor_ip = 7;
+
+  // Action (what)
+  string resource_type = 8;  // "incident", "alert", "rule", etc.
+  string resource_id = 9;
+  string action = 10;        // "create", "update", "delete", "acknowledge", "close", etc.
+  string outcome = 11;       // "success", "failure", "denied"
+
+  // Context (how/why)
+  map<string, string> metadata = 12;  // arbitrary k/v pairs
+  string reason = 13;                  // optional reason/comment
+}

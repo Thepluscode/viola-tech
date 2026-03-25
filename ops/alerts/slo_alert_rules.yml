@@ -1,0 +1,239 @@
+---
+# Viola XDR — Prometheus SLO Alerting Rules
+# Loaded by Prometheus via --web.enable-lifecycle or static scrape config.
+#
+# SLO targets:
+#   Detection latency p99 < 500ms   (5-minute rolling window)
+#   Alert pipeline error rate < 1%  (5-minute rolling window)
+#   Detection event throughput > 0  (staleness guard — 5-minute window)
+#   Kafka consumer lag < 10 000     (per-partition, 5-minute window)
+#   API p99 latency < 200ms         (gateway-api, 5-minute window)
+#   API error rate < 0.5%           (gateway-api 5xx, 5-minute window)
+
+groups:
+
+  # ── Detection Service SLOs ─────────────────────────────────────────────────
+
+  - name: detection_slos
+    interval: 30s
+    rules:
+
+      # P99 end-to-end detection latency > 500 ms
+      - alert: DetectionLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (tenant_id, event_type, le) (
+              rate(detection_processing_seconds_bucket[5m])
+            )
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          team: detection
+        annotations:
+          summary: "Detection P99 latency exceeds 500ms"
+          description: |
+            Tenant {{ $labels.tenant_id }} event type {{ $labels.event_type }}:
+            P99 = {{ $value | humanizeDuration }} (SLO ≤ 500ms, 5-minute window).
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/detection-latency.md"
+
+      # Critical alert: detection P99 > 2 s
+      - alert: DetectionLatencyCritical
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (tenant_id, event_type, le) (
+              rate(detection_processing_seconds_bucket[5m])
+            )
+          ) > 2.0
+        for: 2m
+        labels:
+          severity: critical
+          team: detection
+        annotations:
+          summary: "Detection P99 latency exceeds 2 seconds — SLO breach"
+          description: |
+            Tenant {{ $labels.tenant_id }} event type {{ $labels.event_type }}:
+            P99 = {{ $value | humanizeDuration }} (SLO ≤ 500ms).
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/detection-latency.md"
+
+      # Alert-publish error rate > 1%
+      - alert: AlertPublishErrorRateHigh
+        expr: |
+          (
+            sum by (tenant_id) (
+              rate(detection_events_errors_total{error_type=~"alert_publish_error|hit_publish_error"}[5m])
+            )
+            /
+            sum by (tenant_id) (
+              rate(detection_events_processed_total[5m])
+            )
+          ) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: detection
+        annotations:
+          summary: "Alert publish error rate > 1% for tenant {{ $labels.tenant_id }}"
+          description: |
+            Error rate = {{ $value | humanizePercentage }} over 5 minutes.
+            SLO target ≤ 1%.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/alert-publish-errors.md"
+
+      # No events processed in 5 minutes (staleness / consumer dead)
+      - alert: DetectionEventThroughputZero
+        expr: |
+          sum by (tenant_id) (
+            rate(detection_events_processed_total[5m])
+          ) == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: detection
+        annotations:
+          summary: "Detection consumer for tenant {{ $labels.tenant_id }} has processed 0 events in 5 minutes"
+          description: |
+            Possible Kafka consumer failure, topic stall, or service crash.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/detection-stall.md"
+
+      # Alert generation rate dropping by >80% vs 1 hour ago (anomaly detection)
+      - alert: AlertGenerationRateDrop
+        expr: |
+          (
+            sum(rate(detection_alerts_generated_total[5m]))
+            /
+            sum(rate(detection_alerts_generated_total[5m] offset 1h))
+          ) < 0.2
+            and
+          sum(rate(detection_alerts_generated_total[5m] offset 1h)) > 0
+        for: 10m
+        labels:
+          severity: warning
+          team: detection
+        annotations:
+          summary: "Alert generation rate dropped >80% vs 1 hour ago"
+          description: |
+            Current rate = {{ $value | humanize }}× of the 1-hour-ago rate.
+            Possible rule reload, rule index issue, or upstream event drop.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/alert-rate-drop.md"
+
+  # ── Kafka Consumer Lag SLOs ────────────────────────────────────────────────
+
+  - name: kafka_slos
+    interval: 30s
+    rules:
+
+      # Consumer group lag > 10 000 messages (any partition)
+      - alert: KafkaConsumerLagHigh
+        expr: |
+          kafka_consumergroup_lag > 10000
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Kafka consumer lag > 10k for {{ $labels.consumergroup }}/{{ $labels.topic }}"
+          description: |
+            Partition {{ $labels.partition }}: lag = {{ $value }} messages.
+            At 1k msg/s throughput this is a {{ $value | humanize }}-second backlog.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/kafka-lag.md"
+
+      # Consumer lag > 100 000 — critical backlog
+      - alert: KafkaConsumerLagCritical
+        expr: |
+          kafka_consumergroup_lag > 100000
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Kafka consumer lag > 100k — critical backlog"
+          description: |
+            Consumer group {{ $labels.consumergroup }} topic {{ $labels.topic }}
+            partition {{ $labels.partition }}: lag = {{ $value }} messages.
+
+  # ── Gateway API SLOs ───────────────────────────────────────────────────────
+
+  - name: gateway_api_slos
+    interval: 30s
+    rules:
+
+      # API P99 latency > 200ms
+      - alert: GatewayAPILatencyHigh
+        expr: |
+          histogram_quantile(
+            0.99,
+            sum by (route, le) (
+              rate(http_request_duration_seconds_bucket{job="gateway-api"}[5m])
+            )
+          ) > 0.2
+        for: 5m
+        labels:
+          severity: warning
+          team: gateway
+        annotations:
+          summary: "Gateway API P99 latency > 200ms on route {{ $labels.route }}"
+          description: |
+            P99 = {{ $value | humanizeDuration }}, SLO ≤ 200ms (5-minute window).
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/gateway-latency.md"
+
+      # API 5xx error rate > 0.5%
+      - alert: GatewayAPIErrorRateHigh
+        expr: |
+          (
+            sum by (route) (
+              rate(http_requests_total{job="gateway-api", status=~"5.."}[5m])
+            )
+            /
+            sum by (route) (
+              rate(http_requests_total{job="gateway-api"}[5m])
+            )
+          ) > 0.005
+        for: 5m
+        labels:
+          severity: warning
+          team: gateway
+        annotations:
+          summary: "Gateway API 5xx error rate > 0.5% on route {{ $labels.route }}"
+          description: |
+            Error rate = {{ $value | humanizePercentage }} over 5 minutes.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/gateway-errors.md"
+
+      # Auth failure rate spike (> 10% of all requests)
+      - alert: GatewayAuthFailureSpike
+        expr: |
+          (
+            sum(rate(http_requests_total{job="gateway-api", status="401"}[5m]))
+            /
+            sum(rate(http_requests_total{job="gateway-api"}[5m]))
+          ) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Gateway API auth failure rate > 10% — possible credential stuffing"
+          description: |
+            401 rate = {{ $value | humanizePercentage }} of all requests over 5 minutes.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/auth-failures.md"
+
+  # ── Graph Service SLOs ─────────────────────────────────────────────────────
+
+  - name: graph_slos
+    interval: 30s
+    rules:
+
+      # Graph event processing lag > 5 minutes (Kafka → graph update)
+      - alert: GraphUpdateLagHigh
+        expr: |
+          kafka_consumergroup_lag{consumergroup="graph-service"} > 5000
+        for: 5m
+        labels:
+          severity: warning
+          team: graph
+        annotations:
+          summary: "Graph service Kafka lag > 5 000 — attack graph may be stale"
+          description: |
+            Lag = {{ $value }} messages. At 1k msg/s, graph data is >5 minutes stale.
+          runbook: "https://github.com/viola/viola-platform/blob/main/ops/runbooks/graph-lag.md"

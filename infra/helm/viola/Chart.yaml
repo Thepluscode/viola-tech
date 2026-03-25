@@ -1,0 +1,8 @@
+apiVersion: v2
+name: viola
+description: Viola XDR Platform — AI-native cybersecurity intelligence
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Viola Engineering

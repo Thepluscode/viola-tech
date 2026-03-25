@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-response
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.response.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "viola.selectorLabels" (dict "component" "response" "Release" .Release) | nindent 4 }}

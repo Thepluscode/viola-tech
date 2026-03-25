@@ -1,0 +1,46 @@
+syntax = "proto3";
+package viola.response.v1;
+
+message ResponseRequest {
+  string tenant_id = 1;
+  string response_id = 2;
+  string requested_at = 3;
+  string requested_by = 4;
+  string action_type = 5;
+  string target_type = 6;
+  string target_id = 7;
+  string reason = 8;
+  double confidence = 9;
+  bool requires_approval = 10;
+  string approval_id = 11;
+  repeated string related_alert_ids = 12;
+  map<string,string> parameters = 13;
+  string request_id = 14;
+}
+
+message ResponseResult {
+  string tenant_id = 1;
+  string response_id = 2;
+  string executed_at = 3;
+  string action_type = 4;
+  string target_type = 5;
+  string target_id = 6;
+  string outcome = 7;
+  string details = 8;
+  map<string,string> artifacts = 9;
+  string request_id = 10;
+}
+
+message ResponseFailure {
+  string tenant_id = 1;
+  string response_id = 2;
+  string failed_at = 3;
+  string action_type = 4;
+  string target_type = 5;
+  string target_id = 6;
+  string error_code = 7;
+  string error_message = 8;
+  bool retryable = 9;
+  string retry_after = 10;
+  string request_id = 11;
+}

@@ -1,0 +1,17 @@
+{{- if .Values.podDisruptionBudget.enabled }}
+{{- $components := list "gateway-api" "auth" "detection" "workers" "graph" "response" }}
+{{- range $component := $components }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ $.Release.Name }}-{{ $component }}
+  labels:
+    {{- include "viola.labels" $ | nindent 4 }}
+spec:
+  minAvailable: {{ $.Values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" $component "Release" $.Release) | nindent 6 }}
+{{- end }}
+{{- end }}

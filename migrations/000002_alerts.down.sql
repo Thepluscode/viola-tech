@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS alert_hits;
+DROP TABLE IF EXISTS alert_entities;
+DROP TABLE IF EXISTS alerts;

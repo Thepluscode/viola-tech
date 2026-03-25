@@ -1,0 +1,44 @@
+id: viola:persist_registry_run_key
+name: Persistence via Registry Run Key
+version: 1.0.0
+severity: med
+confidence: 0.75
+category: persistence
+
+event_type: registry_set
+
+description: |
+  Detects modifications to registry run keys, commonly used for
+  persistence mechanisms.
+
+mitre:
+  tactic: persistence
+  technique: T1547.001
+
+match:
+  - field: key_path
+    operator: contains_any
+    values:
+      - \Software\Microsoft\Windows\CurrentVersion\Run
+      - \Software\Microsoft\Windows\CurrentVersion\RunOnce
+      - \Software\Microsoft\Windows\CurrentVersion\RunServices
+      - \Software\Microsoft\Windows\CurrentVersion\RunServicesOnce
+
+  - field: process_name
+    operator: not_in
+    values:
+      - reg.exe
+      - regedit.exe
+      - msiexec.exe
+
+tags:
+  - windows
+  - persistence
+  - registry
+  - t1547
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1547/001/

@@ -1,0 +1,49 @@
+id: viola:exec_powershell_encoded
+name: PowerShell Encoded Command Execution
+version: 1.0.0
+severity: high
+confidence: 0.85
+category: execution
+
+event_type: process_start
+
+description: |
+  Detects execution of PowerShell with encoded commands, commonly used
+  by malware and attackers to obfuscate malicious scripts.
+
+mitre:
+  tactic: execution
+  technique: T1059.001
+
+match:
+  - field: process_name
+    operator: endswith
+    value: powershell.exe
+
+  - field: cmdline
+    operator: contains_any
+    values:
+      - "-EncodedCommand"
+      - "-enc"
+      - "-ec"
+      - "FromBase64String"
+
+suppress_if:
+  - field: parent_process_name
+    operator: equals_any
+    values:
+      - svchost.exe
+      - services.exe
+
+tags:
+  - windows
+  - powershell
+  - execution
+  - obfuscation
+  - t1059
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1059/001/

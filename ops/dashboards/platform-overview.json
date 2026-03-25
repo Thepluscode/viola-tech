@@ -1,0 +1,105 @@
+{
+  "dashboard": {
+    "title": "Viola XDR — Platform Overview",
+    "uid": "viola-platform-overview",
+    "tags": ["viola", "overview"],
+    "timezone": "utc",
+    "refresh": "30s",
+    "time": { "from": "now-24h", "to": "now" },
+    "panels": [
+      {
+        "title": "Service Health",
+        "type": "stat",
+        "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+        "targets": [
+          { "expr": "up{job=\"gateway-api\"}", "legendFormat": "Gateway API" },
+          { "expr": "up{job=\"detection\"}", "legendFormat": "Detection" },
+          { "expr": "up{job=\"ingestion\"}", "legendFormat": "Ingestion" },
+          { "expr": "up{job=\"workers\"}", "legendFormat": "Workers" },
+          { "expr": "up{job=\"graph\"}", "legendFormat": "Graph" },
+          { "expr": "up{job=\"auth\"}", "legendFormat": "Auth" },
+          { "expr": "up{job=\"intel\"}", "legendFormat": "Intel" },
+          { "expr": "up{job=\"response\"}", "legendFormat": "Response" }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "mappings": [
+              { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }
+            ]
+          }
+        }
+      },
+      {
+        "title": "Events Processed (last 24h)",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 0, "y": 4 },
+        "targets": [
+          {
+            "expr": "sum(increase(detection_events_processed_total[24h]))",
+            "legendFormat": "Events"
+          }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "title": "Alerts Generated (last 24h)",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 6, "y": 4 },
+        "targets": [
+          {
+            "expr": "sum(increase(detection_alerts_generated_total[24h]))",
+            "legendFormat": "Alerts"
+          }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "title": "Incidents Created (last 24h)",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 12, "y": 4 },
+        "targets": [
+          {
+            "expr": "sum(increase(workers_incidents_created_total[24h]))",
+            "legendFormat": "Incidents"
+          }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "title": "API Requests (last 24h)",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 18, "y": 4 },
+        "targets": [
+          {
+            "expr": "sum(increase(http_requests_total{job=\"gateway-api\"}[24h]))",
+            "legendFormat": "Requests"
+          }
+        ],
+        "fieldConfig": { "defaults": { "unit": "short" } }
+      },
+      {
+        "title": "Pipeline Throughput",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 10 },
+        "targets": [
+          { "expr": "sum(rate(detection_events_processed_total[5m]))", "legendFormat": "Detection EPS" },
+          { "expr": "sum(rate(detection_alerts_generated_total[5m]))", "legendFormat": "Alerts/sec" },
+          { "expr": "sum(rate(workers_incidents_created_total[5m]))", "legendFormat": "Incidents/sec" }
+        ],
+        "fieldConfig": { "defaults": { "unit": "ops" } }
+      },
+      {
+        "title": "SLO Summary",
+        "type": "table",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 18 },
+        "targets": [
+          {
+            "expr": "vector(1)",
+            "legendFormat": "Detection P99 ≤ 500ms"
+          }
+        ],
+        "description": "Manual SLO tracking table — configure with recording rules for burn rate"
+      }
+    ]
+  }
+}

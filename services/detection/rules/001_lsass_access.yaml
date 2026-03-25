@@ -1,0 +1,55 @@
+id: viola:credential_dump_lsass
+name: Credential Dumping via LSASS Access
+version: 1.0.0
+severity: critical
+confidence: 0.95
+category: credential_access
+
+event_type: process_access
+
+description: |
+  Detects direct access to the LSASS process memory, commonly used by
+  credential dumping tools like Mimikatz, ProcDump, and Cobalt Strike.
+
+mitre:
+  tactic: credential-access
+  technique: T1003.001
+
+match:
+  - field: target_process_name
+    operator: endswith
+    value: lsass.exe
+
+  - field: access_mask
+    operator: contains_any
+    values:
+      - "0x1010"
+      - "0x1410"
+      - "0x1438"
+      - "0x143a"
+
+  - field: source_process_name
+    operator: not_in
+    values:
+      - wmiprvse.exe
+      - taskmgr.exe
+      - procexp.exe
+      - procexp64.exe
+      - MsMpEng.exe
+
+suppress_if:
+  - field: source_process_path
+    operator: startswith
+    value: C:\Program Files\Microsoft
+
+tags:
+  - windows
+  - credential-theft
+  - t1003
+  - lsass
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1003/001/

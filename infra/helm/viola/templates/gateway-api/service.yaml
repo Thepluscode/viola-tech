@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-gateway-api
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+    {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ (index .Values "gateway-api").port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 4 }}

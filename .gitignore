@@ -1,0 +1,22 @@
+.DS_Store
+
+node_modules/
+.next/
+dist/
+.env
+.env.*
+
+bin/
+tmp/
+*.log
+
+.vscode/
+.idea/
+
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# Generated protos (choose commit strategy)
+# If you want to NOT commit generated code, uncomment:
+# shared/go/proto/

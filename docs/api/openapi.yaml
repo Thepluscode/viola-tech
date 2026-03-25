@@ -1,0 +1,516 @@
+openapi: "3.1.0"
+info:
+  title: Viola XDR API
+  version: "1.0.0"
+  description: |
+    REST API for the Viola XDR platform. All endpoints require a valid
+    JWT Bearer token with `tid` (tenant ID) claim. Responses are scoped
+    to the authenticated tenant.
+  contact:
+    name: Viola Security Engineering
+    email: engineering@viola.security
+  license:
+    name: Proprietary
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.viola.security
+    description: Production
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Incidents
+    description: Correlated security incidents aggregated from alerts
+  - name: Alerts
+    description: Individual detection alerts from the pipeline
+  - name: Health
+    description: Service health and readiness probes
+  - name: Response
+    description: Automated and manual response actions
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /ready:
+    get:
+      tags: [Health]
+      summary: Readiness probe (checks database connectivity)
+      security: []
+      responses:
+        "200":
+          description: Service is ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: READY
+        "503":
+          description: Database unavailable
+
+  /api/v1/incidents:
+    get:
+      tags: [Incidents]
+      summary: List incidents
+      description: |
+        Returns incidents for the authenticated tenant, ordered by
+        `updated_at` descending. Supports cursor-based pagination
+        (preferred) or legacy offset pagination.
+      parameters:
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/severity"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - name: cursor
+          in: query
+          description: "Cursor for keyset pagination: `<rfc3339>|<incident_id>` from previous page's `next_cursor`"
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of incidents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/incidents/{id}:
+    get:
+      tags: [Incidents]
+      summary: Get incident by ID
+      parameters:
+        - $ref: "#/components/parameters/resourceId"
+      responses:
+        "200":
+          description: Incident details with related entity/alert/hit IDs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Incident"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [Incidents]
+      summary: Update incident
+      description: Update status, assignment, or closure reason. Emits an audit event.
+      parameters:
+        - $ref: "#/components/parameters/resourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateIncidentRequest"
+      responses:
+        "200":
+          description: Incident updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /api/v1/alerts:
+    get:
+      tags: [Alerts]
+      summary: List alerts
+      parameters:
+        - $ref: "#/components/parameters/status"
+        - $ref: "#/components/parameters/severity"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Paginated list of alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AlertListResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/v1/alerts/{id}:
+    get:
+      tags: [Alerts]
+      summary: Get alert by ID
+      parameters:
+        - $ref: "#/components/parameters/resourceId"
+      responses:
+        "200":
+          description: Alert details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Alert"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+    patch:
+      tags: [Alerts]
+      summary: Update alert
+      parameters:
+        - $ref: "#/components/parameters/resourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAlertRequest"
+      responses:
+        "200":
+          description: Alert updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT issued by the auth service or external OIDC provider.
+        Must contain `tid` (tenant ID) and `roles` claims.
+
+  parameters:
+    resourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Resource ID (incident_id or alert_id)
+
+    status:
+      name: status
+      in: query
+      schema:
+        type: string
+        enum: [open, ack, closed]
+      description: Filter by status
+
+    severity:
+      name: severity
+      in: query
+      schema:
+        type: string
+        enum: [critical, high, medium, low]
+      description: Filter by severity
+
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+      description: Maximum items per page
+
+    offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+        minimum: 0
+      description: Legacy offset pagination (prefer cursor)
+
+  schemas:
+    Incident:
+      type: object
+      required:
+        - tenant_id
+        - incident_id
+        - correlated_group_id
+        - created_at
+        - updated_at
+        - status
+        - severity
+        - max_risk_score
+        - max_confidence
+        - alert_count
+        - hit_count
+        - entity_ids
+        - alert_ids
+        - detection_hit_ids
+      properties:
+        tenant_id:
+          type: string
+        incident_id:
+          type: string
+        correlated_group_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [open, ack, closed]
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        max_risk_score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        max_confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        mitre_tactic:
+          type: string
+          nullable: true
+        mitre_technique:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        assigned_to:
+          type: string
+          nullable: true
+        closure_reason:
+          type: string
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        alert_count:
+          type: integer
+        hit_count:
+          type: integer
+        entity_ids:
+          type: array
+          items:
+            type: string
+        alert_ids:
+          type: array
+          items:
+            type: string
+        detection_hit_ids:
+          type: array
+          items:
+            type: string
+
+    Alert:
+      type: object
+      required:
+        - tenant_id
+        - alert_id
+        - created_at
+        - updated_at
+        - status
+        - severity
+        - confidence
+        - risk_score
+        - title
+        - description
+        - entity_ids
+        - detection_hit_ids
+      properties:
+        tenant_id:
+          type: string
+        alert_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [open, ack, closed]
+        severity:
+          type: string
+          enum: [critical, high, medium, low]
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        risk_score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        title:
+          type: string
+        description:
+          type: string
+        mitre_tactic:
+          type: string
+          nullable: true
+        mitre_technique:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        assigned_to:
+          type: string
+          nullable: true
+        closure_reason:
+          type: string
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        entity_ids:
+          type: array
+          items:
+            type: string
+        detection_hit_ids:
+          type: array
+          items:
+            type: string
+
+    IncidentListResponse:
+      type: object
+      properties:
+        incidents:
+          type: array
+          items:
+            $ref: "#/components/schemas/Incident"
+        count:
+          type: integer
+        next_cursor:
+          type: string
+          description: Opaque cursor for next page (absent if no more pages)
+
+    AlertListResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert"
+        count:
+          type: integer
+        next_cursor:
+          type: string
+
+    UpdateIncidentRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, ack, closed]
+        assigned_to:
+          type: string
+          nullable: true
+        closure_reason:
+          type: string
+          nullable: true
+      minProperties: 1
+
+    UpdateAlertRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, ack, closed]
+        assigned_to:
+          type: string
+          nullable: true
+        closure_reason:
+          type: string
+          nullable: true
+      minProperties: 1
+
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: updated
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        status:
+          type: integer
+
+  responses:
+    Unauthorized:
+      description: Missing or invalid Bearer token
+      content:
+        text/plain:
+          schema:
+            type: string
+            example: missing bearer token
+
+    Forbidden:
+      description: Insufficient permissions or tenant mismatch
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
+    BadRequest:
+      description: Invalid request body or parameters
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"

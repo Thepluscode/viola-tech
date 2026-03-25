@@ -1,0 +1,269 @@
+version: "3.9"
+
+# ── Viola XDR — Local Development Stack ────────────────────────────────────
+# Start everything:    docker compose up --build
+# Infra only:          docker compose up postgres kafka
+# Watch logs:          docker compose logs -f detection workers gateway-api
+# Run smoke test:      bash scripts/dev/smoke_test.sh
+# ───────────────────────────────────────────────────────────────────────────
+
+x-shared-env: &shared-env
+  VIOLA_ENV: dev
+  KAFKA_BROKER: kafka:9092
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+
+  # ── Infrastructure ────────────────────────────────────────────────────────
+
+  postgres:
+    build:
+      context: .
+      dockerfile: scripts/dev/postgres.Dockerfile
+    <<: *restart
+    environment:
+      POSTGRES_USER: viola
+      POSTGRES_PASSWORD: viola
+      POSTGRES_DB: viola
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U viola -d viola"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  kafka:
+    image: apache/kafka:3.7.0
+    <<: *restart
+    environment:
+      KAFKA_NODE_ID: 0
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 0@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 24
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      CLUSTER_ID: "viola-dev-cluster-001"
+    ports:
+      - "9094:9094"   # external (host) access — use localhost:9094 from host tools
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 30s
+
+  # ── Services ──────────────────────────────────────────────────────────────
+
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    <<: *restart
+    environment:
+      PORT: "8081"
+      ISSUER_URL: http://auth:8081
+      AUDIENCE: viola-api
+      TOKEN_TTL: 1h
+      # SIGNING_KEY_PEM: <paste PEM here for persistent key>
+      # SIGNING_KID: viola-prod-key-1
+    ports:
+      - "8081:8081"   # POST /token, GET /.well-known/jwks.json
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8081/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  intel:
+    build:
+      context: .
+      dockerfile: services/intel/Dockerfile
+    <<: *restart
+    environment:
+      PORT: "8082"
+      CACHE_TTL: 10m
+      # OTX_API_KEY: <your AlienVault OTX API key for higher rate limits>
+    ports:
+      - "8082:8082"   # GET /enrich?type=ip&value=1.2.3.4
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8082/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  response:
+    build:
+      context: .
+      dockerfile: services/response/Dockerfile
+    <<: *restart
+    environment:
+      PORT: "8083"
+      DATABASE_URL: postgres://viola:viola@postgres:5432/viola?sslmode=disable
+    ports:
+      - "8083:8083"   # POST /actions, GET /actions?tenant_id=X
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8083/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  detection:
+    build:
+      context: .
+      dockerfile: services/detection/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+      RULES_DIR: /rules
+      METRICS_PORT: "9090"
+    ports:
+      - "9090:9090"   # Prometheus metrics
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  workers:
+    build:
+      context: .
+      dockerfile: services/workers/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+      DATABASE_URL: postgres://viola:viola@postgres:5432/viola?sslmode=disable
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  graph:
+    build:
+      context: .
+      dockerfile: services/graph/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+      METRICS_PORT: "9091"
+    ports:
+      - "9091:9091"   # Prometheus metrics
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  ml-detection:
+    build:
+      context: .
+      dockerfile: services/ml-detection/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+      METRICS_PORT: "9092"
+    ports:
+      - "9092:9092"   # Prometheus metrics + health
+    depends_on:
+      kafka:
+        condition: service_healthy
+    deploy:
+      replicas: 1
+
+  cloud-connector:
+    build:
+      context: .
+      dockerfile: services/cloud-connector/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+      PORT: "8084"
+      VIOLA_TENANT_ID: t_demo
+      AWS_REGION: us-east-1
+    ports:
+      - "8084:8084"   # Health + status
+    depends_on:
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  gateway-api:
+    build:
+      context: .
+      dockerfile: services/gateway-api/Dockerfile
+    <<: *restart
+    environment:
+      <<: *shared-env
+      PORT: "8080"
+      PG_HOST: postgres
+      PG_PORT: "5432"
+      PG_USER: viola
+      PG_PASSWORD: viola
+      PG_DATABASE: viola
+      PG_SSLMODE: disable
+      # Auth: use local dev auth service
+      AUTH_REQUIRE_BEARER: "true"
+      OIDC_ISSUER_URL: http://auth:8081
+      OIDC_AUDIENCE: viola-api
+      OIDC_JWKS_URL: http://auth:8081/.well-known/jwks.json
+      # Audit: no Kafka audit topic required for local dev
+      AUDIT_KAFKA_BROKER: ""
+    ports:
+      - "8080:8080"   # REST API
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      auth:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+volumes:
+  postgres_data:
+  kafka_data:

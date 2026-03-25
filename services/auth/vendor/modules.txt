@@ -1,0 +1,1 @@
+# github.com/viola/shared => ../../shared/go

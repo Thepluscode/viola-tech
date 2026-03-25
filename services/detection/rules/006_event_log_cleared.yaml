@@ -1,0 +1,40 @@
+id: viola:defense_evasion_event_log_clear
+name: Windows Event Log Cleared
+version: 1.0.0
+severity: critical
+confidence: 0.98
+category: defense_evasion
+
+event_type: process_start
+
+description: |
+  Detects attempts to clear Windows event logs, a common defense
+  evasion technique used by attackers to hide their tracks.
+
+mitre:
+  tactic: defense-evasion
+  technique: T1070.001
+
+match:
+  - field: process_name
+    operator: equals
+    value: wevtutil.exe
+
+  - field: cmdline
+    operator: contains_any
+    values:
+      - "cl"
+      - "clear-log"
+      - "clear"
+
+tags:
+  - windows
+  - defense-evasion
+  - anti-forensics
+  - t1070
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1070/001/

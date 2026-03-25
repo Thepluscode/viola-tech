@@ -1,0 +1,30 @@
+{{- if (index .Values "gateway-api").ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-gateway-api
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+  annotations:
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: {{ (index .Values "gateway-api").ingress.className }}
+  {{- if (index .Values "gateway-api").ingress.tls.enabled }}
+  tls:
+    - hosts:
+        - {{ (index .Values "gateway-api").ingress.host }}
+      secretName: {{ (index .Values "gateway-api").ingress.tls.secretName }}
+  {{- end }}
+  rules:
+    - host: {{ (index .Values "gateway-api").ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-gateway-api
+                port:
+                  number: {{ (index .Values "gateway-api").port }}
+{{- end }}

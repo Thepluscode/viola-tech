@@ -1,0 +1,80 @@
+version: "3.9"
+
+# ── Viola XDR — Monitoring Stack ───────────────────────────────────────────
+# Usage:  docker compose -f docker-compose.yml -f ops/monitoring/docker-compose.monitoring.yml up
+# Access: Grafana at http://localhost:3000  (admin/viola)
+#         Prometheus at http://localhost:9099
+# ───────────────────────────────────────────────────────────────────────────
+
+services:
+
+  prometheus:
+    image: prom/prometheus:v2.54.0
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./ops/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./ops/alerts:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9099:9090"
+    networks:
+      - default
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: viola
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/platform-overview.json
+    volumes:
+      - ./ops/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - default
+
+  # ── Kafka Lag Exporter ────────────────────────────────────────────────────
+  # Exports consumer group lag as Prometheus metrics.
+
+  kafka-lag-exporter:
+    image: seglo/kafka-lag-exporter:0.8.2
+    restart: unless-stopped
+    environment:
+      KAFKA_LAG_EXPORTER_CLUSTERS_0_NAME: viola-dev
+      KAFKA_LAG_EXPORTER_CLUSTERS_0_BOOTSTRAP_BROKERS: kafka:9092
+      KAFKA_LAG_EXPORTER_PORT: "8000"
+      KAFKA_LAG_EXPORTER_POLL_INTERVAL: 30s
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kafka
+    networks:
+      - default
+
+  # ── Postgres Exporter ─────────────────────────────────────────────────────
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://viola:viola@postgres:5432/viola?sslmode=disable"
+    ports:
+      - "9187:9187"
+    depends_on:
+      - postgres
+    networks:
+      - default
+
+volumes:
+  prometheus_data:
+  grafana_data:

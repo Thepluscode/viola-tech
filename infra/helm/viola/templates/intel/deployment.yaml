@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-intel
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+    {{- include "viola.selectorLabels" (dict "component" "intel" "Release" .Release) | nindent 4 }}
+spec:
+  replicas: {{ .Values.intel.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" "intel" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "viola.selectorLabels" (dict "component" "intel" "Release" .Release) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "viola.serviceAccountName" . }}
+      containers:
+        - name: intel
+          image: {{ include "viola.image" (dict "global" .Values.global "image" .Values.intel.image "Chart" .Chart) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.intel.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.intel.port | quote }}
+            {{- range $k, $v := .Values.intel.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.intel.resources | nindent 12 }}

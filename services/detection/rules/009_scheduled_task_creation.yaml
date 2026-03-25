@@ -1,0 +1,49 @@
+id: viola:persist_scheduled_task
+name: Suspicious Scheduled Task Creation
+version: 1.0.0
+severity: med
+confidence: 0.75
+category: persistence
+
+event_type: process_start
+
+description: |
+  Detects creation of scheduled tasks, commonly used for persistence
+  and privilege escalation.
+
+mitre:
+  tactic: persistence
+  technique: T1053.005
+
+match:
+  - field: process_name
+    operator: equals
+    value: schtasks.exe
+
+  - field: cmdline
+    operator: contains
+    value: /create
+
+  - field: cmdline
+    operator: not_in
+    values:
+      - Microsoft
+
+suppress_if:
+  - field: parent_process_name
+    operator: equals_any
+    values:
+      - msiexec.exe
+      - setup.exe
+
+tags:
+  - windows
+  - persistence
+  - scheduled-task
+  - t1053
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1053/005/

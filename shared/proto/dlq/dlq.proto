@@ -1,0 +1,22 @@
+syntax = "proto3";
+package viola.dlq.v1;
+
+message DlqEvent {
+  string tenant_id = 1;
+  string dlq_id = 2;
+  string failed_at = 3;
+  string producer_service = 4;
+  string consumer_group = 5;
+  string original_topic = 6;
+  int32 original_partition = 7;
+  int64 original_offset = 8;
+  string original_key = 9;
+  string schema = 10;
+  string request_id = 11;
+  string source = 12;
+  string error_code = 13;
+  string error_message = 14;
+  bool retryable = 15;
+  bytes payload_snippet = 16;
+  map<string,string> headers = 17;
+}

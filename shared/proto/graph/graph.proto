@@ -1,0 +1,26 @@
+syntax = "proto3";
+package viola.graph.v1;
+
+message GraphEdgeObserved {
+  string tenant_id = 1;
+  string edge_id = 2;
+  string observed_at = 3;
+  string source_node_id = 4;
+  string target_node_id = 5;
+  string edge_type = 6;
+  double weight = 7;
+  string provenance = 8;
+  map<string,string> labels = 9;
+  string request_id = 10;
+}
+
+message GraphRiskUpdate {
+  string tenant_id = 1;
+  string updated_at = 2;
+  string node_id = 3;
+  double risk_score = 4;
+  string reason = 5;
+  repeated string contributing_edge_ids = 6;
+  repeated string contributing_alert_ids = 7;
+  string request_id = 8;
+}

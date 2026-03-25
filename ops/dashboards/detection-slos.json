@@ -1,0 +1,137 @@
+{
+  "dashboard": {
+    "title": "Viola XDR — Detection Engine SLOs",
+    "uid": "viola-detection-slos",
+    "tags": ["viola", "detection", "slo"],
+    "timezone": "utc",
+    "refresh": "30s",
+    "time": { "from": "now-6h", "to": "now" },
+    "panels": [
+      {
+        "title": "Detection P99 Latency (SLO: ≤500ms)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, sum by (le) (rate(detection_processing_seconds_bucket[5m])))",
+            "legendFormat": "P99"
+          },
+          {
+            "expr": "histogram_quantile(0.95, sum by (le) (rate(detection_processing_seconds_bucket[5m])))",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "histogram_quantile(0.50, sum by (le) (rate(detection_processing_seconds_bucket[5m])))",
+            "legendFormat": "P50"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "s",
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 0.3 },
+                { "color": "red", "value": 0.5 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Events Processed / sec",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "sum(rate(detection_events_processed_total[5m]))",
+            "legendFormat": "Processed"
+          },
+          {
+            "expr": "sum(rate(detection_events_errors_total[5m]))",
+            "legendFormat": "Errors"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "ops" }
+        }
+      },
+      {
+        "title": "Alert Publish Error Rate (SLO: <1%)",
+        "type": "gauge",
+        "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(detection_events_errors_total{error_type=~\"alert_publish_error|hit_publish_error\"}[5m])) / sum(rate(detection_events_processed_total[5m])) * 100",
+            "legendFormat": "Error %"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percent",
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 0.5 },
+                { "color": "red", "value": 1.0 }
+              ]
+            },
+            "max": 5
+          }
+        }
+      },
+      {
+        "title": "Alerts Generated / min",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(rate(detection_alerts_generated_total[5m])) * 60",
+            "legendFormat": "alerts/min"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "short" }
+        }
+      },
+      {
+        "title": "Detection Hits by Severity",
+        "type": "piechart",
+        "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum by (severity) (increase(detection_alerts_generated_total[1h]))",
+            "legendFormat": "{{ severity }}"
+          }
+        ]
+      },
+      {
+        "title": "Processing by Event Type",
+        "type": "timeseries",
+        "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum by (event_type) (rate(detection_events_processed_total[5m]))",
+            "legendFormat": "{{ event_type }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "ops" }
+        }
+      },
+      {
+        "title": "Detection P99 Latency by Tenant",
+        "type": "table",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.99, sum by (tenant_id, le) (rate(detection_processing_seconds_bucket[5m])))",
+            "legendFormat": "{{ tenant_id }}",
+            "format": "table",
+            "instant": true
+          }
+        ]
+      }
+    ]
+  }
+}

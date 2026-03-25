@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-graph
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+    {{- include "viola.selectorLabels" (dict "component" "graph" "Release" .Release) | nindent 4 }}
+spec:
+  replicas: {{ .Values.graph.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" "graph" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "viola.selectorLabels" (dict "component" "graph" "Release" .Release) | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.graph.metricsPort }}"
+    spec:
+      serviceAccountName: {{ include "viola.serviceAccountName" . }}
+      containers:
+        - name: graph
+          image: {{ include "viola.image" (dict "global" .Values.global "image" .Values.graph.image "Chart" .Chart) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.graph.metricsPort }}
+              protocol: TCP
+          env:
+            {{- include "viola.commonEnv" . | nindent 12 }}
+            - name: METRICS_PORT
+              value: {{ .Values.graph.metricsPort | quote }}
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: metrics
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            {{- toYaml .Values.graph.resources | nindent 12 }}

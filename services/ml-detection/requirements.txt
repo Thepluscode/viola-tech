@@ -1,0 +1,10 @@
+confluent-kafka==2.6.1
+protobuf==5.29.3
+numpy==2.2.3
+scikit-learn==1.6.1
+prometheus-client==0.21.1
+structlog==24.4.0
+pydantic==2.10.6
+pydantic-settings==2.7.1
+uvicorn==0.34.0
+fastapi==0.115.8

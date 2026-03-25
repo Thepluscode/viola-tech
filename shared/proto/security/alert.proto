@@ -1,0 +1,24 @@
+syntax = "proto3";
+package viola.security.v1;
+
+message Alert {
+  string tenant_id = 1;
+  string alert_id = 2;
+  string created_at = 3;
+  string updated_at = 4;
+  string status = 5;
+  string severity = 6;
+  double confidence = 7;
+  double risk_score = 8;
+  string title = 9;
+  string description = 10;
+  repeated string entity_ids = 11;
+  repeated string detection_hit_ids = 12;
+  string mitre_tactic = 13;
+  string mitre_technique = 14;
+  map<string,string> labels = 15;
+  string assigned_to = 16;
+  string closure_reason = 17;
+  string request_id = 18;
+  string correlated_group_id = 19;
+}

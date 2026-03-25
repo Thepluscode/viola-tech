@@ -1,0 +1,129 @@
+package engine
+
+import (
+  "context"
+  "fmt"
+  "strings"
+  "time"
+
+  "github.com/viola/shared/correlation"
+  "github.com/viola/shared/id"
+  sharedkafka "github.com/viola/shared/kafka"
+  securityv1 "github.com/viola/shared/proto/security"
+  telemetryv1 "github.com/viola/shared/proto/telemetry"
+)
+
+type Engine struct {
+  topics sharedkafka.Topics
+  hitProd *sharedkafka.Producer
+  alertProd *sharedkafka.Producer
+}
+
+type Config struct { Env string; Brokers []string }
+
+func New(cfg Config) (*Engine, error) {
+  topics := sharedkafka.NewTopics(cfg.Env)
+  hitProd, err := sharedkafka.NewProducer(sharedkafka.ProducerConfig{Brokers: cfg.Brokers, Topic: topics.DetectionHit})
+  if err != nil { return nil, err }
+  alertProd, err := sharedkafka.NewProducer(sharedkafka.ProducerConfig{Brokers: cfg.Brokers, Topic: topics.AlertCreated})
+  if err != nil { _=hitProd.Close(); return nil, err }
+  return &Engine{topics: topics, hitProd: hitProd, alertProd: alertProd}, nil
+}
+
+func (e *Engine) Close() error { _=e.hitProd.Close(); return e.alertProd.Close() }
+
+func (e *Engine) HandleNormalized(ctx context.Context, msg sharedkafka.Message) error {
+  envCodec := sharedkafka.ProtobufCodec[*telemetryv1.EventEnvelope]{Schema: "viola.telemetry.v1.EventEnvelope", New: func() *telemetryv1.EventEnvelope { return &telemetryv1.EventEnvelope{} }}
+  ev, err := envCodec.Decode(msg.Value)
+  if err != nil { return fmt.Errorf("decode envelope: %w", err) }
+  if ev.TenantId == "" || ev.TenantId != msg.TenantID { return fmt.Errorf("tenant mismatch") }
+
+  if ev.EventType != "process_start" { return nil }
+  payloadStr := strings.ToLower(string(ev.Payload))
+  if !looksSuspicious(payloadStr) { return nil }
+
+  now := time.Now().UTC()
+  ruleID := "viola:proc_suspicious_exe"
+  groupID := correlation.GroupID(ev.TenantId, ruleID, ev.EntityId, now, correlation.Bucket15m)
+
+  hit := &securityv1.DetectionHit{
+    TenantId: ev.TenantId,
+    HitId: id.New(),
+    DetectedAt: now.Format(time.RFC3339),
+    RuleId: ruleID,
+    RuleName: "Suspicious executable launched",
+    RuleVersion: "1.0.0",
+    Category: "execution",
+    Severity: "high",
+    Confidence: 0.85,
+    EntityIds: []string{ev.EntityId},
+    MitreTactic: "execution",
+    MitreTechnique: "T1204",
+    CorrelatedGroupId: groupID,
+    RequestId: msg.RequestID,
+    Source: "detection",
+    Evidence: []*securityv1.Evidence{{
+      ObservedAt: ev.ObservedAt,
+      EventType: ev.EventType,
+      EntityId: ev.EntityId,
+      Summary: "process_start matched suspicious exe pattern",
+      PayloadSnippet: capBytes(ev.Payload, 1024),
+      Labels: map[string]string{"rule": "proc_suspicious_exe"},
+    }},
+    Tags: []string{"mvp"},
+  }
+
+  hitCodec := sharedkafka.ProtobufCodec[*securityv1.DetectionHit]{Schema: "viola.security.v1.DetectionHit", New: func() *securityv1.DetectionHit { return &securityv1.DetectionHit{} }}
+  hitBytes, err := hitCodec.Encode(hit)
+  if err != nil { return err }
+
+  hitHdr := map[string]string{
+    sharedkafka.HdrTenantID: ev.TenantId,
+    sharedkafka.HdrRequestID: msg.RequestID,
+    sharedkafka.HdrSource: "detection",
+    sharedkafka.HdrSchema: hitCodec.SchemaName(),
+    sharedkafka.HdrEmittedAt: now.Format(time.RFC3339),
+  }
+  hitKey := []byte(fmt.Sprintf("%s:%s", ev.TenantId, hit.HitId))
+  if err := e.hitProd.Produce(ctx, sharedkafka.ProduceMessage{Key: hitKey, Value: hitBytes, Headers: hitHdr}); err != nil { return err }
+
+  alert := &securityv1.Alert{
+    TenantId: ev.TenantId,
+    AlertId: id.New(),
+    CreatedAt: now.Format(time.RFC3339),
+    UpdatedAt: now.Format(time.RFC3339),
+    Status: "open",
+    Severity: "high",
+    Confidence: 0.85,
+    RiskScore: 78.0,
+    Title: "Suspicious process execution",
+    Description: "A suspicious executable was launched on an endpoint.",
+    EntityIds: []string{ev.EntityId},
+    DetectionHitIds: []string{hit.HitId},
+    MitreTactic: "execution",
+    MitreTechnique: "T1204",
+    Labels: map[string]string{"rule": "proc_suspicious_exe"},
+    RequestId: msg.RequestID,
+    CorrelatedGroupId: groupID,
+  }
+
+  alertCodec := sharedkafka.ProtobufCodec[*securityv1.Alert]{Schema: "viola.security.v1.Alert", New: func() *securityv1.Alert { return &securityv1.Alert{} }}
+  alertBytes, err := alertCodec.Encode(alert)
+  if err != nil { return err }
+
+  alertHdr := map[string]string{
+    sharedkafka.HdrTenantID: ev.TenantId,
+    sharedkafka.HdrRequestID: msg.RequestID,
+    sharedkafka.HdrSource: "detection",
+    sharedkafka.HdrSchema: alertCodec.SchemaName(),
+    sharedkafka.HdrEmittedAt: now.Format(time.RFC3339),
+  }
+  alertKey := []byte(fmt.Sprintf("%s:%s", ev.TenantId, alert.AlertId))
+  return e.alertProd.Produce(ctx, sharedkafka.ProduceMessage{Key: alertKey, Value: alertBytes, Headers: alertHdr})
+}
+
+func looksSuspicious(s string) bool {
+  return strings.Contains(s, "powershell") || strings.Contains(s, "cmd.exe") || strings.Contains(s, "rundll32") || strings.Contains(s, "wscript")
+}
+
+func capBytes(b []byte, max int) []byte { if len(b) <= max { return b }; return b[:max] }

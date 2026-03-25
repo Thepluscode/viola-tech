@@ -1,0 +1,37 @@
+id: viola:credential_brute_force
+name: Failed Login Brute Force Attempt
+version: 1.0.0
+severity: high
+confidence: 0.90
+category: credential_access
+
+event_type: authentication_failed
+
+description: |
+  Detects multiple failed authentication attempts in a short time window,
+  indicating potential brute force or password spraying attacks.
+
+mitre:
+  tactic: credential-access
+  technique: T1110.001
+
+match:
+  - field: status
+    operator: equals
+    value: failed
+
+threshold:
+  count: 10
+  window: 5m
+  group_by: user_id
+
+tags:
+  - brute-force
+  - credential-access
+  - t1110
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1110/001/

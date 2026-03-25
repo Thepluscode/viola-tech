@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-gateway-api
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+    {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 4 }}
+spec:
+  {{- if not (index .Values "gateway-api").autoscaling.enabled }}
+  replicas: {{ (index .Values "gateway-api").replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ (index .Values "gateway-api").port }}"
+    spec:
+      serviceAccountName: {{ include "viola.serviceAccountName" . }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: gateway-api
+          image: {{ include "viola.image" (dict "global" .Values.global "image" (index .Values "gateway-api").image "Chart" .Chart) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ (index .Values "gateway-api").port }}
+              protocol: TCP
+          env:
+            {{- include "viola.commonEnv" . | nindent 12 }}
+            {{- include "viola.postgresEnv" . | nindent 12 }}
+            - name: PORT
+              value: {{ (index .Values "gateway-api").port | quote }}
+            {{- range $k, $v := (index .Values "gateway-api").env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml (index .Values "gateway-api").resources | nindent 12 }}

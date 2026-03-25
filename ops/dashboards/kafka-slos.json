@@ -1,0 +1,106 @@
+{
+  "dashboard": {
+    "title": "Viola XDR — Kafka & Pipeline SLOs",
+    "uid": "viola-kafka-slos",
+    "tags": ["viola", "kafka", "pipeline", "slo"],
+    "timezone": "utc",
+    "refresh": "30s",
+    "time": { "from": "now-6h", "to": "now" },
+    "panels": [
+      {
+        "title": "Consumer Group Lag (SLO: <10k)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "sum by (consumergroup, topic) (kafka_consumergroup_lag)",
+            "legendFormat": "{{ consumergroup }} / {{ topic }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5000 },
+                { "color": "red", "value": 10000 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Messages Produced / sec (by topic)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum by (topic) (rate(kafka_topic_partition_current_offset[5m]))",
+            "legendFormat": "{{ topic }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "ops" }
+        }
+      },
+      {
+        "title": "Messages Consumed / sec (by group)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum by (consumergroup) (rate(kafka_consumergroup_current_offset[5m]))",
+            "legendFormat": "{{ consumergroup }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "ops" }
+        }
+      },
+      {
+        "title": "Pipeline Throughput: Raw → Normalized → Alert → Incident",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+        "targets": [
+          {
+            "expr": "sum(rate(kafka_topic_partition_current_offset{topic=~\".*telemetry.*raw\"}[5m]))",
+            "legendFormat": "Raw Telemetry"
+          },
+          {
+            "expr": "sum(rate(kafka_topic_partition_current_offset{topic=~\".*normalized\"}[5m]))",
+            "legendFormat": "Normalized"
+          },
+          {
+            "expr": "sum(rate(kafka_topic_partition_current_offset{topic=~\".*alert.*created\"}[5m]))",
+            "legendFormat": "Alerts Created"
+          },
+          {
+            "expr": "sum(rate(kafka_topic_partition_current_offset{topic=~\".*incident.*upserted\"}[5m]))",
+            "legendFormat": "Incidents Upserted"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "ops" }
+        }
+      },
+      {
+        "title": "DLQ Messages (Dead Letter Queue)",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+        "targets": [
+          {
+            "expr": "sum by (topic) (rate(kafka_topic_partition_current_offset{topic=~\".*dlq.*\"}[5m]))",
+            "legendFormat": "{{ topic }}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "color": { "mode": "palette-classic" }
+          }
+        }
+      }
+    ]
+  }
+}

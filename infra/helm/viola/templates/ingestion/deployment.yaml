@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ingestion
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+    {{- include "viola.selectorLabels" (dict "component" "ingestion" "Release" .Release) | nindent 4 }}
+spec:
+  replicas: {{ .Values.ingestion.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" "ingestion" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "viola.selectorLabels" (dict "component" "ingestion" "Release" .Release) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "viola.serviceAccountName" . }}
+      containers:
+        - name: ingestion
+          image: {{ include "viola.image" (dict "global" .Values.global "image" .Values.ingestion.image "Chart" .Chart) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          env:
+            {{- include "viola.commonEnv" . | nindent 12 }}
+          resources:
+            {{- toYaml .Values.ingestion.resources | nindent 12 }}

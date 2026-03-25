@@ -1,0 +1,50 @@
+id: viola:lateral_movement_psexec
+name: Lateral Movement via PSExec
+version: 1.0.0
+severity: high
+confidence: 0.90
+category: lateral_movement
+
+event_type: process_start
+
+description: |
+  Detects execution of PSExec or PSExec-like tools commonly used
+  for lateral movement in Windows networks.
+
+mitre:
+  tactic: lateral-movement
+  technique: T1570
+
+match:
+  - field: process_name
+    operator: equals_any
+    values:
+      - psexec.exe
+      - psexec64.exe
+      - paexec.exe
+
+  - field: cmdline
+    operator: contains_any
+    values:
+      - "\\\\127.0.0.1"
+      - "\\\\localhost"
+      - "accepteula"
+      - "-s"
+      - "-c"
+
+suppress_if:
+  - field: user
+    operator: contains
+    value: SYSTEM
+
+tags:
+  - windows
+  - lateral-movement
+  - psexec
+  - t1570
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1570/

@@ -1,0 +1,31 @@
+syntax = "proto3";
+package viola.security.v1;
+
+message DetectionHit {
+  string tenant_id = 1;
+  string hit_id = 2;
+  string detected_at = 3;
+  string rule_id = 4;
+  string rule_name = 5;
+  string rule_version = 6;
+  string category = 7;
+  string severity = 8;
+  double confidence = 9;
+  repeated string entity_ids = 10;
+  repeated Evidence evidence = 11;
+  repeated string tags = 12;
+  string mitre_tactic = 13;
+  string mitre_technique = 14;
+  string correlated_group_id = 15;
+  string request_id = 16;
+  string source = 17;
+}
+
+message Evidence {
+  string observed_at = 1;
+  string event_type = 2;
+  string entity_id = 3;
+  string summary = 4;
+  bytes payload_snippet = 5;
+  map<string,string> labels = 6;
+}

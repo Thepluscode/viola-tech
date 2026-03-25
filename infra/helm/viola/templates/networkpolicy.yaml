@@ -1,0 +1,54 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-viola-default
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow intra-namespace traffic between Viola services.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+    # Allow ingress controller to reach gateway-api.
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: {{ (index .Values "gateway-api").port }}
+          protocol: TCP
+  egress:
+    # Allow all egress (DNS, Kafka, Postgres, external APIs).
+    - {}
+---
+# Restrict gateway-api: only ingress controller and other Viola services.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-gateway-api-ingress
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" "gateway-api" "Release" .Release) | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/instance: {{ .Release.Name }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: {{ (index .Values "gateway-api").port }}
+          protocol: TCP

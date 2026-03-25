@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-auth
+  labels:
+    {{- include "viola.labels" . | nindent 4 }}
+    {{- include "viola.selectorLabels" (dict "component" "auth" "Release" .Release) | nindent 4 }}
+spec:
+  replicas: {{ .Values.auth.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "viola.selectorLabels" (dict "component" "auth" "Release" .Release) | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "viola.selectorLabels" (dict "component" "auth" "Release" .Release) | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "viola.serviceAccountName" . }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    {{- include "viola.selectorLabels" (dict "component" "auth" "Release" .Release) | nindent 20 }}
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: auth
+          image: {{ include "viola.image" (dict "global" .Values.global "image" .Values.auth.image "Chart" .Chart) }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.auth.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.auth.port | quote }}
+            - name: ISSUER_URL
+              value: "http://{{ .Release.Name }}-auth:{{ .Values.auth.port }}"
+            {{- range $k, $v := .Values.auth.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.auth.resources | nindent 12 }}

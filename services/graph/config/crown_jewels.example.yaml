@@ -1,0 +1,37 @@
+# Crown Jewels Configuration
+# Defines critical assets that should be protected
+
+tenants:
+  # Example tenant
+  tenant-abc:
+    crown_jewels:
+      - id: endpoint:dc-01
+        reason: Domain Controller
+        criticality: 100
+
+      - id: endpoint:db-prod-01
+        reason: Production Database Server
+        criticality: 100
+
+      - id: cloud:s3-bucket-secrets
+        reason: Secrets Storage (AWS S3)
+        criticality: 100
+
+      - id: user:admin@company.com
+        reason: Global Administrator
+        criticality: 95
+
+      - id: endpoint:backup-server
+        reason: Backup Server (contains sensitive data)
+        criticality: 90
+
+  # Another tenant
+  tenant-xyz:
+    crown_jewels:
+      - id: endpoint:dc-primary
+        reason: Primary Domain Controller
+        criticality: 100
+
+      - id: endpoint:payment-gateway
+        reason: Payment Processing Server
+        criticality: 100

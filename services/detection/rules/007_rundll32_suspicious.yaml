@@ -1,0 +1,48 @@
+id: viola:exec_rundll32_suspicious
+name: Suspicious Rundll32 Execution
+version: 1.0.0
+severity: high
+confidence: 0.80
+category: execution
+
+event_type: process_start
+
+description: |
+  Detects suspicious usage of rundll32.exe for executing DLLs or
+  scripts, commonly used as a living-off-the-land technique.
+
+mitre:
+  tactic: execution
+  technique: T1218.011
+
+match:
+  - field: process_name
+    operator: equals
+    value: rundll32.exe
+
+  - field: cmdline
+    operator: contains_any
+    values:
+      - javascript
+      - vbscript
+      - http
+      - https
+      - .ps1
+      - .bat
+
+suppress_if:
+  - field: cmdline
+    operator: contains
+    value: shell32.dll
+
+tags:
+  - windows
+  - execution
+  - lolbin
+  - t1218
+
+metadata:
+  author: Viola Security Team
+  date: 2026-02-14
+  references:
+    - https://attack.mitre.org/techniques/T1218/011/

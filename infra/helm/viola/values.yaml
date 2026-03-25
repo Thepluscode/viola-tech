@@ -1,0 +1,165 @@
+global:
+  env: production
+  imageRegistry: ghcr.io/viola
+  imagePullPolicy: IfNotPresent
+  kafka:
+    brokers: "kafka:9092"
+  postgres:
+    host: postgres
+    port: "5432"
+    user: viola
+    database: viola
+    sslmode: require
+    existingSecret: viola-postgres-credentials
+    secretKey: password
+
+# ── Gateway API ─────────────────────────────────────────────────────────
+gateway-api:
+  replicaCount: 2
+  image:
+    repository: gateway-api
+    tag: ""  # defaults to Chart.appVersion
+  port: 8080
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+  env:
+    AUTH_REQUIRE_BEARER: "true"
+    OIDC_AUDIENCE: viola-api
+  ingress:
+    enabled: true
+    className: nginx
+    host: api.viola.internal
+    tls:
+      enabled: true
+      secretName: viola-api-tls
+
+# ── Auth ────────────────────────────────────────────────────────────────
+auth:
+  replicaCount: 2
+  image:
+    repository: auth
+    tag: ""
+  port: 8081
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  env:
+    AUDIENCE: viola-api
+    TOKEN_TTL: 1h
+
+# ── Ingestion ───────────────────────────────────────────────────────────
+ingestion:
+  replicaCount: 3
+  image:
+    repository: ingestion
+    tag: ""
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# ── Detection ───────────────────────────────────────────────────────────
+detection:
+  replicaCount: 3
+  image:
+    repository: detection
+    tag: ""
+  metricsPort: 9090
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+  env:
+    RULES_DIR: /rules
+
+# ── Workers ─────────────────────────────────────────────────────────────
+workers:
+  replicaCount: 2
+  image:
+    repository: workers
+    tag: ""
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+# ── Graph ───────────────────────────────────────────────────────────────
+graph:
+  replicaCount: 2
+  image:
+    repository: graph
+    tag: ""
+  metricsPort: 9091
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# ── Intel ───────────────────────────────────────────────────────────────
+intel:
+  replicaCount: 1
+  image:
+    repository: intel
+    tag: ""
+  port: 8082
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  env:
+    CACHE_TTL: 10m
+
+# ── Response ────────────────────────────────────────────────────────────
+response:
+  replicaCount: 2
+  image:
+    repository: response
+    tag: ""
+  port: 8083
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+# ── Service Account ────────────────────────────────────────────────────
+serviceAccount:
+  create: true
+  name: viola
+  annotations: {}
+
+# ── Pod Disruption Budgets ──────────────────────────────────────────────
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1

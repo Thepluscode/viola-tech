@@ -1,0 +1,640 @@
+openapi: 3.0.3
+info:
+  title: Viola Gateway API
+  description: |
+    Enterprise-grade security platform API for managing incidents, alerts, and detection rules.
+
+    ## Authentication
+
+    All API endpoints require OAuth 2.0 Bearer token authentication using OIDC.
+
+    Supported IdPs:
+    - Microsoft Entra ID (Azure AD)
+    - Okta
+    - Auth0
+
+    ## Authorization
+
+    Access is controlled via RBAC with the following roles:
+    - **SOCReader**: View-only access to incidents and alerts
+    - **SOCResponder**: Triage and respond to incidents
+    - **SOCEngineer**: Create and manage detection rules
+    - **ViolaAdmin**: Full administrative access
+
+    ## Rate Limiting
+
+    - Default: 120 requests per minute per user/tenant
+    - Custom limits can be set via JWT claim
+    - Rate limit headers included in responses
+
+    ## Audit Logging
+
+    All sensitive operations are logged to Kafka for compliance and security monitoring.
+  version: 1.0.0
+  contact:
+    name: Viola Technologies
+    email: security@viola.com
+  license:
+    name: Proprietary
+servers:
+  - url: https://api.viola.com
+    description: Production
+  - url: https://staging-api.viola.com
+    description: Staging
+  - url: http://localhost:8080
+    description: Local Development
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: incidents
+    description: Security incident management
+  - name: alerts
+    description: Security alert management
+  - name: health
+    description: Service health and readiness
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Returns service health status
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: OK
+
+  /ready:
+    get:
+      summary: Readiness check
+      description: Returns service readiness (database connectivity)
+      tags:
+        - health
+      security: []
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: READY
+        '503':
+          description: Service is not ready
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: DB unavailable
+
+  /api/v1/incidents:
+    get:
+      summary: List incidents
+      description: Retrieve a list of security incidents for the authenticated tenant
+      tags:
+        - incidents
+      parameters:
+        - name: status
+          in: query
+          description: Filter by incident status
+          schema:
+            type: string
+            enum: [open, ack, closed]
+        - name: severity
+          in: query
+          description: Filter by severity level
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: limit
+          in: query
+          description: Maximum number of results (1-200)
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          description: Pagination offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of incidents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  incidents:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Incident'
+                  count:
+                    type: integer
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: Request limit per window
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Remaining requests in current window
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/incidents/{id}:
+    get:
+      summary: Get incident
+      description: Retrieve a specific incident by ID
+      tags:
+        - incidents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Incident ID
+          schema:
+            type: string
+            example: INC-2024-001
+      responses:
+        '200':
+          description: Incident details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+    patch:
+      summary: Update incident
+      description: Update incident status, assignment, or closure reason
+      tags:
+        - incidents
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Incident ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IncidentUpdate'
+      responses:
+        '200':
+          description: Incident updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/alerts:
+    get:
+      summary: List alerts
+      description: Retrieve a list of security alerts for the authenticated tenant
+      tags:
+        - alerts
+      parameters:
+        - name: status
+          in: query
+          description: Filter by alert status
+          schema:
+            type: string
+            enum: [open, ack, closed]
+        - name: severity
+          in: query
+          description: Filter by severity level
+          schema:
+            type: string
+            enum: [low, medium, high, critical]
+        - name: limit
+          in: query
+          description: Maximum number of results
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+        - name: offset
+          in: query
+          description: Pagination offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: List of alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alerts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+                  count:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/v1/alerts/{id}:
+    get:
+      summary: Get alert
+      description: Retrieve a specific alert by ID
+      tags:
+        - alerts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Alert ID
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Alert details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Alert'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+    patch:
+      summary: Update alert
+      description: Update alert status, assignment, or closure reason
+      tags:
+        - alerts
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Alert ID
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlertUpdate'
+      responses:
+        '200':
+          description: Alert updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: updated
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        OAuth 2.0 Bearer token obtained from your identity provider (Entra ID, Okta, Auth0).
+
+        Required scopes:
+        - `incidents:read` - View incidents
+        - `incidents:write` - Update incidents
+        - `alerts:read` - View alerts
+        - `alerts:write` - Update alerts
+
+  schemas:
+    Incident:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+          description: Tenant identifier
+        incident_id:
+          type: string
+          description: Unique incident identifier
+          example: INC-2024-001
+        correlated_group_id:
+          type: string
+          description: Correlation group ID for related alerts
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [open, ack, closed]
+          description: Current incident status
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+          description: Severity level
+        max_risk_score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Highest risk score from associated alerts
+        max_confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: Highest confidence from associated alerts
+        mitre_tactic:
+          type: string
+          nullable: true
+          description: MITRE ATT&CK tactic
+        mitre_technique:
+          type: string
+          nullable: true
+          description: MITRE ATT&CK technique
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+          description: Custom labels
+        assigned_to:
+          type: string
+          nullable: true
+          description: User assigned to incident
+        closure_reason:
+          type: string
+          nullable: true
+          description: Reason for closing (if closed)
+        alert_count:
+          type: integer
+          description: Number of associated alerts
+        hit_count:
+          type: integer
+          description: Number of detection hits
+        entity_ids:
+          type: array
+          items:
+            type: string
+          description: Associated entity IDs
+        alert_ids:
+          type: array
+          items:
+            type: string
+          description: Associated alert IDs
+        detection_hit_ids:
+          type: array
+          items:
+            type: string
+          description: Associated detection hit IDs
+
+    IncidentUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, ack, closed]
+          description: New incident status
+        assigned_to:
+          type: string
+          description: User to assign incident to
+        closure_reason:
+          type: string
+          description: Reason for closing (required if status=closed)
+      example:
+        status: ack
+        assigned_to: alice@company.com
+
+    Alert:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        alert_id:
+          type: string
+          example: ALT-2024-12345
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [open, ack, closed]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        confidence:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        risk_score:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+        title:
+          type: string
+          description: Alert title
+        description:
+          type: string
+          description: Detailed alert description
+        correlated_group_id:
+          type: string
+          nullable: true
+        mitre_tactic:
+          type: string
+          nullable: true
+        mitre_technique:
+          type: string
+          nullable: true
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        assigned_to:
+          type: string
+          nullable: true
+        closure_reason:
+          type: string
+          nullable: true
+        entity_ids:
+          type: array
+          items:
+            type: string
+        detection_hit_ids:
+          type: array
+          items:
+            type: string
+
+    AlertUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [open, ack, closed]
+        assigned_to:
+          type: string
+        closure_reason:
+          type: string
+      example:
+        status: closed
+        closure_reason: False positive
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        code:
+          type: string
+          description: Error code
+        status:
+          type: integer
+          description: HTTP status code
+      example:
+        error: Missing tenant ID
+        code: UNAUTHORIZED
+        status: 401
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Invalid request body
+            code: BAD_REQUEST
+            status: 400
+
+    Unauthorized:
+      description: Unauthorized - Missing or invalid authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Missing bearer token
+            code: UNAUTHORIZED
+            status: 401
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Insufficient permissions
+            code: FORBIDDEN
+            status: 403
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Incident not found
+            code: NOT_FOUND
+            status: 404
+
+    TooManyRequests:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              message:
+                type: string
+              key:
+                type: string
+          example:
+            error: rate_limit_exceeded
+            message: Too many requests. Please try again later.
+            key: user-123:tenant-xyz
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit per window
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests (0)
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retrying

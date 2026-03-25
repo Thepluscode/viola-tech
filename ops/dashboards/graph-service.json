@@ -1,0 +1,122 @@
+{
+  "dashboard": {
+    "title": "Viola XDR — Attack Graph Service",
+    "uid": "viola-graph-service",
+    "tags": ["viola", "graph", "attack-graph"],
+    "timezone": "utc",
+    "refresh": "30s",
+    "time": { "from": "now-6h", "to": "now" },
+    "panels": [
+      {
+        "title": "Graph Edge Processing Rate",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+        "targets": [
+          {
+            "expr": "sum(rate(graph_edges_processed_total[5m]))",
+            "legendFormat": "Edges/sec"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "ops" }
+        }
+      },
+      {
+        "title": "Risk Score Updates / min",
+        "type": "timeseries",
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+        "targets": [
+          {
+            "expr": "sum(rate(graph_risk_updates_total[5m])) * 60",
+            "legendFormat": "Risk Updates"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": { "unit": "short" }
+        }
+      },
+      {
+        "title": "Graph Size (Nodes & Edges)",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(graph_nodes_total)",
+            "legendFormat": "Nodes"
+          },
+          {
+            "expr": "sum(graph_edges_total)",
+            "legendFormat": "Edges"
+          }
+        ]
+      },
+      {
+        "title": "Graph Kafka Consumer Lag (SLO: <5k)",
+        "type": "gauge",
+        "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(kafka_consumergroup_lag{consumergroup=\"graph-service\"})",
+            "legendFormat": "Lag"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 2500 },
+                { "color": "red", "value": 5000 }
+              ]
+            },
+            "max": 10000
+          }
+        }
+      },
+      {
+        "title": "High-Risk Nodes (score > 0.8)",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(graph_high_risk_nodes_total)",
+            "legendFormat": "High-risk nodes"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5 },
+                { "color": "red", "value": 20 }
+              ]
+            }
+          }
+        }
+      },
+      {
+        "title": "Crown Jewel Reachability",
+        "type": "stat",
+        "gridPos": { "h": 6, "w": 6, "x": 18, "y": 8 },
+        "targets": [
+          {
+            "expr": "sum(graph_crown_jewel_reachable_paths)",
+            "legendFormat": "Reachable paths"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "thresholds": {
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]
+            }
+          }
+        }
+      }
+    ]
+  }
+}
