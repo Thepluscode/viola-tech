@@ -15,6 +15,8 @@ export function Skeleton({ className }: SkeletonProps) {
   );
 }
 
+export const LoadingSkeleton = Skeleton;
+
 export function TableSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="space-y-2">
